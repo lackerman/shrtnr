@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shrtnr
+spec:
+  selector:
+    matchLabels:
+      app: shrtnr
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: shrtnr
+    spec:
+      containers:
+      - name: shrtnr
+        image: eu.gcr.io/deltalabs-xyz/shrtnr
+        ports:
+        - containerPort: 3000
