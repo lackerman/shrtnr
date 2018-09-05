@@ -1,8 +1,17 @@
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
-  name: k8s-svc-ingress
+  name: shrtnr
 spec:
   backend:
-    serviceName: web
+    serviceName: shrtnr
+    servicePort: 80
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: shrtnr-staging
+spec:
+  backend:
+    serviceName: shrtnr-staging
     servicePort: 80

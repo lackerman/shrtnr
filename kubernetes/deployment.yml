@@ -11,9 +11,10 @@ spec:
     metadata:
       labels:
         app: shrtnr
+        step: staging
     spec:
       containers:
       - name: shrtnr
-        image: eu.gcr.io/deltalabs-xyz/shrtnr
+        image: eu.gcr.io/deltalabs-xyz/shrtnr:LATEST_COMMIT
         ports:
-        - containerPort: 3000
+        - containerPort: 8080

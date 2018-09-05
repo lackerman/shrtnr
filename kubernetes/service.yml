@@ -1,10 +1,26 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: public-service-a
+  name: shrtnr
 spec:
   selector:
     app: shrtnr
+    step: prod
+  type: NodePort
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: shrtnr-staging
+spec:
+  selector:
+    app: shrtnr
+    step: staging
   type: NodePort
   ports:
   - name: http
