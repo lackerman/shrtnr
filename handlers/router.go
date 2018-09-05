@@ -2,55 +2,87 @@ package handlers
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
-	"reflect"
+	"strings"
+	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
+
 	"github.com/lackerman/shrtnr/utils"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-// NewRouter sets up all the app paths
-func NewRouter(db *leveldb.DB) *mux.Router {
-	mux := mux.NewRouter()
-	fs := http.FileServer(http.Dir("public"))
-	mux.Handle("/", fs)
-	mux.Handle("/url", Post(Creater(db)))
-	mux.Handle("/all", Get(Lister(db)))
-	mux.Handle("/{key}", Get(Retriever(db)))
-	return mux
-}
+const handlerKey = "handler"
 
-// Request is the struct used for http Request representation
-type Request struct {
-	reqType string
-	h       http.HandlerFunc
-}
-
-func (r *Request) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	log.Printf("%v :: %v :: %v", req.Method, req.URL, reflect.ValueOf(r.h))
-	switch {
-	case r.reqType == req.Method:
-		r.h(w, req)
-		return
+// NewServer creates a specific server
+func NewServer(port int, t *template.Template, db *leveldb.DB, l *log.Logger) http.Server {
+	return http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      newRouter(t, db, l),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
 	}
-	http.Error(w, "Unsupport Method Type for request", http.StatusUnsupportedMediaType)
 }
 
-// Post is part of the DSL for limiting requests to POST method types
-func Post(h http.HandlerFunc) *Request {
-	return &Request{http.MethodPost, h}
+func newRouter(t *template.Template, db *leveldb.DB, l *log.Logger) http.Handler {
+	gin.SetMode(gin.ReleaseMode)
+	e := gin.New()
+	e.Use(middleware(l))
+	e.GET("/", wrapper(home(t), l))
+	e.POST("/url", wrapper(creater(t, db), l))
+	e.Any("/all", wrapper(lister(t, db), l))
+	e.POST("/edit", wrapper(edit(db), l))
+	e.GET("/u/:key", wrapper(retriever(db), l))
+	return e
 }
 
-// Get is part of the DSL for limiting requests to POST method types
-func Get(h http.HandlerFunc) *Request {
-	return &Request{http.MethodGet, h}
+func middleware(l *log.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		defer func() {
+			handler, exists := c.Get(handlerKey)
+			if !exists {
+				handler = c.HandlerName
+			}
+			if err := recover(); err != nil {
+				l.Printf("%+v", err)
+				c.String(500, "Failed to process the request: Error: %v", err)
+			}
+			l.Printf("Time taken for '%v': %v", handler, time.Since(start))
+		}()
+
+		c.Next()
+	}
+}
+
+func wrapper(h handler, l *log.Logger) gin.HandlerFunc {
+	fnName := utils.FuncName(h)
+	return func(c *gin.Context) {
+		c.Set(handlerKey, fnName)
+		err := h(c.Writer, c.Request)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+type handler func(http.ResponseWriter, *http.Request) error
+
+func home(t *template.Template) handler {
+	return func(w http.ResponseWriter, req *http.Request) error {
+		return t.ExecuteTemplate(w, "index.tmpl", map[string]string{
+			"Title":   "Shrtnr",
+			"Heading": "Paste your URL below",
+		})
+	}
 }
 
 // Creater sets up the handler used for creating URLs
-func Creater(db *leveldb.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
+func creater(t *template.Template, db *leveldb.DB) handler {
+	return func(w http.ResponseWriter, req *http.Request) error {
 		req.ParseForm()
 
 		url := req.Form.Get("url")
@@ -60,21 +92,66 @@ func Creater(db *leveldb.DB) http.HandlerFunc {
 			db.Put([]byte(encoded), []byte(url), nil)
 		}(encoded, url)
 
-		w.Write([]byte(encoded))
+		return t.ExecuteTemplate(w, "url.tmpl", map[string]string{
+			"Title":   "Shrtnr",
+			"Heading": "Copy your new shrtnd URL",
+			"URL":     fmt.Sprintf("http://%s/u/%s", req.Host, encoded),
+		})
 	}
 }
 
 // Retriever sets up the handler for retrieving the URLs
-func Retriever(db *leveldb.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		vars := mux.Vars(req)
-		w.Write([]byte(fmt.Sprintf("%v, %+v", "Retriever", vars)))
+func retriever(db *leveldb.DB) handler {
+	return func(w http.ResponseWriter, req *http.Request) error {
+		parts := strings.Split(req.RequestURI, "/")
+		key := parts[len(parts)-1]
+		fmt.Println(key)
+		url, err := db.Get([]byte(key), nil)
+		if err != nil {
+			return err
+		}
+		http.Redirect(w, req, string(url), http.StatusTemporaryRedirect)
+		return nil
 	}
 }
 
 // Lister sets up a handler for getting the full list of URLs
-func Lister(db *leveldb.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("Lister"))
+func lister(t *template.Template, db *leveldb.DB) handler {
+	return func(w http.ResponseWriter, req *http.Request) error {
+		urls := map[string]string{}
+
+		iter := db.NewIterator(nil, nil)
+		for iter.Next() {
+			// Remember that the contents of the returned slice should not be modified, and
+			// only valid until the next call to Next.
+			urls[string(iter.Key())] = string(iter.Value())
+		}
+		iter.Release()
+		err := iter.Error()
+		if err != nil {
+			return err
+		}
+
+		return t.ExecuteTemplate(w, "all.tmpl", map[string]interface{}{
+			"Title":   "Shrtnr",
+			"Heading": "Select the URL you want to shorten",
+			"URLs":    urls,
+		})
+	}
+}
+
+// edit sets up a handler for editing a selection of urls
+func edit(db *leveldb.DB) handler {
+	return func(w http.ResponseWriter, req *http.Request) error {
+		req.ParseForm()
+
+		for k := range req.Form {
+			go func(k string) {
+				db.Delete([]byte(k), nil)
+			}(k)
+		}
+
+		http.Redirect(w, req, "/all", http.StatusTemporaryRedirect)
+		return nil
 	}
 }
