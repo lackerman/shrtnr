@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+{{template "_head.tmpl" .Title}}
+
+<body>
+    {{template "_header.tmpl" .Heading}}
+
+    <div class="container">
+        <div style="margin-top: 2em"></div>
+        <div class="is-offset-1 is-10">
+            <form action="/edit" method="POST">
+                {{range $key, $value := .URLs }}
+                <p>
+                    <label class="checkbox">
+                        <input type="checkbox" name="{{ $key }}"> {{ $key }} -> {{ $value }}
+                    </label>
+                </p>
+                {{end}}
+                <br />
+                <div class="control">
+                    <input class="button is-primary" type="submit" value="Delete">
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

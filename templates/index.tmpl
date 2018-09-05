@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+{{template "_head.tmpl" .Title}}
+
+<body>
+    {{template "_header.tmpl" .Heading}}
+
+    <div class="container">
+        <div style="margin-top: 2em"></div>
+        <div class="is-offset-1 is-10">
+            <form action="/url" method="POST">
+                <div class="field has-addons">
+                    <div class="control is-expanded">
+                        <input class="input is-primary is-large is-hovered" type="text" name="url" placeholder="Paste your URL here">
+                    </div>
+                    <div class="control">
+                        <input class="button is-primary is-large" type="submit" value="Shorten">
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

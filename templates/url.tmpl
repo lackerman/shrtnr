@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+{{template "_head.tmpl" .Title}}
+
+<body>
+    {{template "_header.tmpl" .Heading}}
+
+    <div class="container">
+        <div style="margin-top: 2em"></div>
+        <div class="is-offset-1 is-10">
+            <form action="/edit" method="POST">
+                <div class="field has-addons">
+                    <div class="control is-expanded">
+                        <input class="input is-large" type="url" placeholder="Url" id="url" value="{{ .URL }}" disabled>
+                    </div>
+                    <div class="control">
+                        <a class="button is-large" id="copy">
+                            <span class="icon is-medium">
+                                <i class="far fa-clipboard"></i>
+                            </span>
+                            <span>Copy to Clipboard</span>
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+
+<script>
+    document.getElementById('copy').addEventListener('click', (event) => {
+        if (document.queryCommandSupported('copy')) {
+            const url = document.getElementById('url');
+            url.disabled = false;
+            url.focus();
+            url.select();
+            try {
+                var successful = document.execCommand('copy');
+                var msg = successful ? 'successful' : 'unsuccessful';
+                console.log('Fallback: Copying text command was ' + msg);
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            url.disabled = true;
+        }
+    });
+</script>
+
+</html>
