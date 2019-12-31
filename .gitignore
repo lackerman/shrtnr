@@ -1,3 +1,10 @@
-bin
-.DS_Store
+bin/
+vendor/
 
+# IDE/Editor files
+.idea
+.code
+*.swp
+
+# Mac files
+.DS_Store

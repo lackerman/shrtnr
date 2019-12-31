@@ -6,8 +6,10 @@ import (
 )
 
 // EncodeURL takes a Url and returns a shortened version of it
-func EncodeURL(s string) string {
+func EncodeURL(s string) (string, error) {
 	h := fnv.New32a()
-	h.Write([]byte(s))
-	return fmt.Sprintf("%x", h.Sum32())
+	if _, err := h.Write([]byte(s)); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum32()), nil
 }

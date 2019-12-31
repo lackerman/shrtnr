@@ -9,9 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/lackerman/shrtnr/utils"
 	"github.com/syndtr/goleveldb/leveldb"
+	"gitlab.com/lackerman/shrtnr/utils"
 )
 
 const handlerKey = "handler"
@@ -86,7 +85,10 @@ func creater(t *template.Template, db *leveldb.DB) handler {
 		req.ParseForm()
 
 		url := req.Form.Get("url")
-		encoded := utils.EncodeURL(url)
+		encoded, err := utils.EncodeURL(url)
+		if err != nil {
+			return err
+		}
 
 		go func(encoded string, url string) {
 			db.Put([]byte(encoded), []byte(url), nil)
