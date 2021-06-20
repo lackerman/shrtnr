@@ -1,6 +1,7 @@
 name = shrtnr
 project = deltalabs-xyz
 compute_zone = europe-west2-b
+image_repository = lackerman
 
 .PHONY: clean docker-build docker-push setup clean-deploy newpods
 
@@ -38,7 +39,7 @@ setup:
 		--no-enable-basic-auth \
 		--issue-client-certificate
 
-docker_image = eu.gcr.io/$(project)/$(name)
+docker_image = $(image_repository)/$(name)
 deployment_id = $(shell kubectl get deployments -l app=$(name) --output=jsonpath='{.items[0].metadata.name}')
 pod_id = $(shell kubectl get pods -l app=$(name) --output=jsonpath='{.items[0].metadata.name}')
 latest_commit = $(shell git log -n 1 --pretty=format:"%H")

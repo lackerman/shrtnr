@@ -15,6 +15,7 @@ spec:
     spec:
       containers:
       - name: shrtnr
-        image: eu.gcr.io/deltalabs-xyz/shrtnr:LATEST_COMMIT
+        imagePullPolicy: Always
+        image: lackerman/shrtnr:LATEST_COMMIT
         ports:
         - containerPort: 8080

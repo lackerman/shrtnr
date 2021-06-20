@@ -3,20 +3,20 @@ package handlers
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-logr/logr"
+	"github.com/lackerman/shrtnr/utils"
 	"github.com/syndtr/goleveldb/leveldb"
-	"gitlab.com/lackerman/shrtnr/utils"
 )
 
 const handlerKey = "handler"
 
 // NewServer creates a specific server
-func NewServer(port int, t *template.Template, db *leveldb.DB, l *log.Logger) http.Server {
+func NewServer(port int, t *template.Template, db *leveldb.DB, l logr.Logger) http.Server {
 	return http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
 		Handler:      newRouter(t, db, l),
@@ -25,39 +25,39 @@ func NewServer(port int, t *template.Template, db *leveldb.DB, l *log.Logger) ht
 	}
 }
 
-func newRouter(t *template.Template, db *leveldb.DB, l *log.Logger) http.Handler {
+func newRouter(t *template.Template, db *leveldb.DB, l logr.Logger) http.Handler {
 	gin.SetMode(gin.ReleaseMode)
-	e := gin.New()
-	e.Use(middleware(l))
-	e.GET("/", wrapper(home(t), l))
-	e.POST("/url", wrapper(creater(t, db), l))
-	e.Any("/all", wrapper(lister(t, db), l))
-	e.POST("/edit", wrapper(edit(db), l))
-	e.GET("/u/:key", wrapper(retriever(db), l))
-	return e
+	r := gin.New()
+	r.Use(middleware(l))
+	r.GET("/", wrapper(home(t), l))
+	r.POST("/url", wrapper(creater(t, db), l))
+	r.Any("/all", wrapper(lister(t, db), l))
+	r.POST("/edit", wrapper(edit(db), l))
+	r.GET("/u/:key", wrapper(retriever(db), l))
+	return r
 }
 
-func middleware(l *log.Logger) gin.HandlerFunc {
+func middleware(l logr.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 
+		handler, exists := c.Get(handlerKey)
+		if !exists {
+			handler = c.HandlerName()
+		}
 		defer func() {
-			handler, exists := c.Get(handlerKey)
-			if !exists {
-				handler = c.HandlerName
-			}
 			if err := recover(); err != nil {
-				l.Printf("%+v", err)
+				l.Error(err.(error), "recovered from an error processing the request")
 				c.String(500, "Failed to process the request: Error: %v", err)
 			}
-			l.Printf("Time taken for '%v': %v", handler, time.Since(start))
+			l.V(1).Info("Time taken for '%v': %v", handler, time.Since(start))
 		}()
 
 		c.Next()
 	}
 }
 
-func wrapper(h handler, l *log.Logger) gin.HandlerFunc {
+func wrapper(h handler, l logr.Logger) gin.HandlerFunc {
 	fnName := utils.FuncName(h)
 	return func(c *gin.Context) {
 		c.Set(handlerKey, fnName)
