@@ -1,24 +1,14 @@
 name = shrtnr
-project = deltalabs-xyz
-compute_zone = europe-west2-b
 image_repository = lackerman
 
-.PHONY: clean docker-build docker-push setup clean-deploy newpods
+# Google Cloud
+project = deltalabs-xyz
+compute_zone = europe-west2-b
 
-build: test main.go
-	CGO_ENABLED=0 GOOS=linux go build -o bin/shrtnr main.go
+.PHONY: setup clean-deploy newpods
 
-clean:
-	rm bin/shrtnr
-
-test:
-	go test ./...
-
-docker-build: Dockerfile build
-	docker build -t $(docker_image):$(latest_commit) .
-
-docker-push: docker-build
-	docker push $(docker_image):$(latest_commit)
+release:
+	goreleaser --rm-dist
 
 rollout: docker-push
 	cat kubernetes/deployment.yml | sed -e 's/LATEST_COMMIT/$(latest_commit)/g' | kubectl apply -f -

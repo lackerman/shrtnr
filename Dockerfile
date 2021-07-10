@@ -2,7 +2,7 @@ FROM alpine
 
 WORKDIR /app
 
-COPY bin/shrtnr .
+COPY shrtnr .
 COPY templates templates
 
 CMD ["/app/shrtnr", ""]

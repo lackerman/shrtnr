@@ -1,0 +1,62 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+# Disable binaries
+archives:
+- format: binary
+dockers:
+  - image_templates: ["lackerman/shrtnr:{{ .Version }}-amd64"]
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/lackerman/shrtnr
+      - --label=org.opencontainers.image.source=https://github.com/lackerman/shrtnr
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=MIT
+    extra_files:
+      - templates
+  - image_templates: ["lackerman/shrtnr:{{ .Version }}-arm64"]
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/arm64/v8
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/lackerman/shrtnr
+      - --label=org.opencontainers.image.source=https://github.com/lackerman/shrtnr
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=MIT
+    extra_files:
+      - templates
+docker_manifests:
+  - name_template: lackerman/shrtnr:{{ .Version }}
+    image_templates:
+      - lackerman/shrtnr:{{ .Version }}-amd64
+      - lackerman/shrtnr:{{ .Version }}-arm64
+checksum:
+  name_template: "checksums.txt"
+snapshot:
+  name_template: "{{ .Tag }}-snapshot"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+release:
+  guthub:
+    owner: lackerman
+    name: shrtnr

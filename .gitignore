@@ -8,3 +8,4 @@ vendor/
 
 # Mac files
 .DS_Store
+dist/
