@@ -57,6 +57,6 @@ changelog:
       - "^docs:"
       - "^test:"
 release:
-  guthub:
+  github:
     owner: lackerman
     name: shrtnr
