@@ -1,17 +1,13 @@
 name = shrtnr
 image_repository = lackerman
 
-# Google Cloud
-project = deltalabs-xyz
-compute_zone = europe-west2-b
-
 .PHONY: setup clean-deploy newpods
 
 release:
 	goreleaser --rm-dist
 
 rollout: docker-push
-	cat kubernetes/deployment.yml | sed -e 's/LATEST_COMMIT/$(latest_commit)/g' | kubectl apply -f -
+	cat kubernetes/deployment.yml | sed -e 's/LATEST_RELEASE/$(latest_release)/g' | kubectl apply -f -
 
 newpods: docker-push
 	kubectl delete pod -l app=$(name)
@@ -32,4 +28,4 @@ setup:
 docker_image = $(image_repository)/$(name)
 deployment_id = $(shell kubectl get deployments -l app=$(name) --output=jsonpath='{.items[0].metadata.name}')
 pod_id = $(shell kubectl get pods -l app=$(name) --output=jsonpath='{.items[0].metadata.name}')
-latest_commit = $(shell git log -n 1 --pretty=format:"%H")
+latest_release = $(shell git tag | sort -u -r | head -n1)
