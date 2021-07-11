@@ -2,158 +2,138 @@ package handlers
 
 import (
 	"fmt"
-	"html/template"
 	"net/http"
-	"strings"
-	"time"
+
+	"github.com/lackerman/shrtnr/tracing"
+	"github.com/lackerman/shrtnr/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-logr/logr"
-	"github.com/lackerman/shrtnr/utils"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-const handlerKey = "handler"
-
-// NewServer creates a specific server
-func NewServer(port int, t *template.Template, db *leveldb.DB, l logr.Logger) http.Server {
-	return http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      newRouter(t, db, l),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
+type handler struct {
+	db  *leveldb.DB
+	log logr.Logger
 }
 
-func newRouter(t *template.Template, db *leveldb.DB, l logr.Logger) http.Handler {
+func NewRouter(db *leveldb.DB, l logr.Logger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
+
 	r := gin.New()
-	r.Use(middleware(l))
-	r.GET("/", wrapper(home(t), l))
-	r.POST("/url", wrapper(creater(t, db), l))
-	r.Any("/all", wrapper(lister(t, db), l))
-	r.POST("/edit", wrapper(edit(db), l))
-	r.GET("/u/:key", wrapper(retriever(db), l))
+	r.LoadHTMLGlob("templates/*")
+	r.Use(tracing.Middleware())
+	r.Use(gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		if err, ok := recovered.(string); ok {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("error: %s", err))
+		}
+		c.AbortWithStatus(http.StatusInternalServerError)
+	}))
+
+	h := handler{db: db, log: l}
+	r.GET("/", h.home)
+	r.GET("/spantest", h.spanTest)
+	r.POST("/url", h.creater)
+	r.Any("/all", h.lister)
+	r.POST("/edit", h.edit)
+	r.GET("/u/:key", h.retriever)
 	return r
 }
 
-func middleware(l logr.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
+func (h *handler) home(c *gin.Context) {
+	ctx, span := tracing.NewSpan(h.log.V(0).Info, c.Request.Context(), c.HandlerName())
+	defer span.End()
 
-		handler, exists := c.Get(handlerKey)
-		if !exists {
-			handler = c.HandlerName()
-		}
-		defer func() {
-			if err := recover(); err != nil {
-				l.Error(err.(error), "recovered from an error processing the request")
-				c.String(500, "Failed to process the request: Error: %v", err)
-			}
-			l.V(1).Info("Time taken for '%v': %v", handler, time.Since(start))
-		}()
-
-		c.Next()
+	res, err := tracing.HttpRequest(ctx, http.MethodGet, "http://localhost:8080/spantest", nil)
+	if err != nil {
+		panic(err)
 	}
-}
+	h.log.V(0).Info("Received a response", "status_code", res.StatusCode)
 
-func wrapper(h handler, l logr.Logger) gin.HandlerFunc {
-	fnName := utils.FuncName(h)
-	return func(c *gin.Context) {
-		c.Set(handlerKey, fnName)
-		err := h(c.Writer, c.Request)
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
-type handler func(http.ResponseWriter, *http.Request) error
-
-func home(t *template.Template) handler {
-	return func(w http.ResponseWriter, req *http.Request) error {
-		return t.ExecuteTemplate(w, "index.tmpl", map[string]string{
-			"Title":   "Shrtnr",
-			"Heading": "Paste your URL below",
-		})
-	}
+	c.HTML(http.StatusOK, "index.tmpl", map[string]string{
+		"Title":   "Shrtnr",
+		"Heading": "Paste your URL below",
+	})
 }
 
 // Creater sets up the handler used for creating URLs
-func creater(t *template.Template, db *leveldb.DB) handler {
-	return func(w http.ResponseWriter, req *http.Request) error {
-		req.ParseForm()
+func (h *handler) creater(c *gin.Context) {
+	_, span := tracing.NewSpan(h.log.V(0).Info, c.Request.Context(), c.HandlerName())
+	defer span.End()
 
-		url := req.Form.Get("url")
-		encoded, err := utils.EncodeURL(url)
-		if err != nil {
-			return err
-		}
+	c.Request.ParseForm()
 
-		go func(encoded string, url string) {
-			db.Put([]byte(encoded), []byte(url), nil)
-		}(encoded, url)
-
-		return t.ExecuteTemplate(w, "url.tmpl", map[string]string{
-			"Title":   "Shrtnr",
-			"Heading": "Copy your new shrtnd URL",
-			"URL":     fmt.Sprintf("http://%s/u/%s", req.Host, encoded),
-		})
+	url := c.Request.Form.Get("url")
+	encoded, err := utils.EncodeURL(url)
+	if err != nil {
+		panic(err)
 	}
+
+	go func(encoded string, url string) {
+		h.db.Put([]byte(encoded), []byte(url), nil)
+	}(encoded, url)
+
+	c.HTML(http.StatusOK, "url.tmpl", map[string]string{
+		"Title":   "Shrtnr",
+		"Heading": "Copy your new shrtnd URL",
+		"URL":     fmt.Sprintf("http://%s/u/%s", c.Request.Host, encoded),
+	})
 }
 
 // Retriever sets up the handler for retrieving the URLs
-func retriever(db *leveldb.DB) handler {
-	return func(w http.ResponseWriter, req *http.Request) error {
-		parts := strings.Split(req.RequestURI, "/")
-		key := parts[len(parts)-1]
-		fmt.Println(key)
-		url, err := db.Get([]byte(key), nil)
-		if err != nil {
-			return err
-		}
-		http.Redirect(w, req, string(url), http.StatusTemporaryRedirect)
-		return nil
+func (h *handler) retriever(c *gin.Context) {
+	_, span := tracing.NewSpan(h.log.V(0).Info, c.Request.Context(), c.HandlerName())
+	defer span.End()
+
+	key := c.Query("key")
+	url, err := h.db.Get([]byte(key), nil)
+	if err != nil {
+		panic(err)
 	}
+	c.Redirect(http.StatusTemporaryRedirect, string(url))
 }
 
 // Lister sets up a handler for getting the full list of URLs
-func lister(t *template.Template, db *leveldb.DB) handler {
-	return func(w http.ResponseWriter, req *http.Request) error {
-		urls := map[string]string{}
+func (h *handler) lister(c *gin.Context) {
+	_, span := tracing.NewSpan(h.log.V(0).Info, c.Request.Context(), c.HandlerName())
+	defer span.End()
 
-		iter := db.NewIterator(nil, nil)
-		for iter.Next() {
-			// Remember that the contents of the returned slice should not be modified, and
-			// only valid until the next call to Next.
-			urls[string(iter.Key())] = string(iter.Value())
-		}
-		iter.Release()
-		err := iter.Error()
-		if err != nil {
-			return err
-		}
-
-		return t.ExecuteTemplate(w, "all.tmpl", map[string]interface{}{
-			"Title":   "Shrtnr",
-			"Heading": "Select the URL you want to shorten",
-			"URLs":    urls,
-		})
+	urls := map[string]string{}
+	iter := h.db.NewIterator(nil, nil)
+	for iter.Next() {
+		// Remember that the contents of the returned slice should not be modified, and
+		// only valid until the next call to Next.
+		urls[string(iter.Key())] = string(iter.Value())
 	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		panic(err)
+	}
+
+	c.HTML(http.StatusOK, "all.tmpl", map[string]interface{}{
+		"Title":   "Shrtnr",
+		"Heading": "Select the URL you want to shorten",
+		"URLs":    urls,
+	})
 }
 
 // edit sets up a handler for editing a selection of urls
-func edit(db *leveldb.DB) handler {
-	return func(w http.ResponseWriter, req *http.Request) error {
-		req.ParseForm()
+func (h *handler) edit(c *gin.Context) {
+	_, span := tracing.NewSpan(h.log.V(0).Info, c.Request.Context(), c.HandlerName())
+	defer span.End()
 
-		for k := range req.Form {
-			go func(k string) {
-				db.Delete([]byte(k), nil)
-			}(k)
-		}
+	url := c.PostForm("url")
+	go func(url string) {
+		h.db.Delete([]byte(url), nil)
+	}(url)
 
-		http.Redirect(w, req, "/all", http.StatusTemporaryRedirect)
-		return nil
-	}
+	c.Redirect(http.StatusTemporaryRedirect, string("/all"))
+}
+
+func (h *handler) spanTest(c *gin.Context) {
+	_, span := tracing.NewSpan(h.log.V(0).Info, c.Request.Context(), c.HandlerName())
+	defer span.End()
+
+	c.JSON(http.StatusOK, "{\"hello\":\"there\"}")
 }

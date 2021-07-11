@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
-	"html/template"
+	"fmt"
 
 	"github.com/lackerman/shrtnr/handlers"
+	"github.com/lackerman/shrtnr/tracing"
+
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"k8s.io/klog/v2"
@@ -16,6 +18,7 @@ func main() {
 	defer klog.Flush()
 
 	port := flag.Int("port", 8080, "Specify the port to use for the server.")
+	zipkin := flag.String("zipkin", "localhost:9411", "Specify the zipkin server url and port")
 	flag.Parse()
 
 	logr := klogr.New()
@@ -27,15 +30,17 @@ func main() {
 	}
 	defer db.Close()
 
-	logr.V(0).Info("loading the templates")
-	templates, err := template.ParseGlob("templates/*")
+	logr.V(0).Info("starting the tracer")
+	shutdown, err := tracing.InitTracer(fmt.Sprintf("http://%s/api/v2/spans", *zipkin))
 	if err != nil {
 		panic(err)
 	}
+	defer shutdown()
 
-	logr.V(0).Info("starting the server")
-	server := handlers.NewServer(*port, templates, db, logr)
-	if err := server.ListenAndServe(); err != nil {
+	listenOn := fmt.Sprintf(":%v", *port)
+	logr.V(0).Info("starting the server", "listening_on", listenOn)
+	router := handlers.NewRouter(db, logr)
+	if err := router.Run(listenOn); err != nil {
 		panic(err)
 	}
 }

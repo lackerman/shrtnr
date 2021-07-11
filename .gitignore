@@ -5,6 +5,7 @@ vendor/
 .idea
 .code
 *.swp
+.vscode
 
 # Mac files
 .DS_Store
