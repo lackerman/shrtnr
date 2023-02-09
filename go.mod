@@ -3,7 +3,7 @@ module github.com/lackerman/shrtnr
 go 1.16
 
 require (
-	github.com/gin-gonic/gin v1.7.2
+	github.com/gin-gonic/gin v1.7.7
 	github.com/go-logr/logr v0.4.0
 	github.com/syndtr/goleveldb v1.0.0
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.21.0
